@@ -1,0 +1,5 @@
+agenda.md
+GEMINI.md
+venv/
+__pycache__/
+*.log
