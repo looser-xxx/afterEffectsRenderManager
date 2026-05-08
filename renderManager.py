@@ -44,33 +44,33 @@ logging.basicConfig(
     handlers=[RotatingFileHandler(logPath, maxBytes=1024*1024, backupCount=2)]
 )
 
-def sendNotify(title, msg):
+def sendNotification(title, message):
     """ Quick wrapper for system notifications """
     try:
-        subprocess.run(["notify-send", title, msg], check=True)
+        subprocess.run(["notify-send", title, message], check=True)
     except:
         logging.error("Could not send system notification")
 
-def getMatchFromLLM(target, folders, level):
+def getMatchFromLLM(target, folderList, levelName):
     """ 
     Ask Ollama to help match folder names. 
     Handles my typos and weird abbreviations like 'wrk' for 'Work'.
     """
-    if not folders:
+    if not folderList:
         return None
     
     # Simple check first - saves an API call
-    for f in folders:
-        if target.lower() == f.lower():
-            return f
+    for folder in folderList:
+        if target.lower() == folder.lower():
+            return folder
 
     # If simple check fails, bring in the big guns (LLM)
     apiUrl = "http://localhost:11434/api/generate"
     
     # Prompt is tailored for Qwen 3.5 reasoning
     promptText = f"""
-    Match "{target}" to one of these folders: {folders}.
-    This is for a {level} folder.
+    Match "{target}" to one of these folders: {folderList}.
+    This is for a {levelName} folder.
     - If it's a typo or abbreviation, match it.
     - If it's totally different, return null.
     - Response MUST be JSON: {{"match": "name" or null}}
@@ -96,60 +96,60 @@ def getMatchFromLLM(target, folders, level):
     
     return None
 
-def getFinalPath(workType, brand, project):
+def getFinalPath(workType, brandName, projectId):
     """ Find or create the directory structure on the NAS """
     root = Path(userConfig["baseWorkDir"])
     
-    parts = [("workType", workType), ("brand", brand), ("project", project)]
-    current = root
+    levels = [("workType", workType), ("brandName", brandName), ("projectId", projectId)]
+    currentPath = root
 
-    for key, val in parts:
-        if not current.exists():
-            current.mkdir(parents=True, exist_ok=True)
+    for levelKey, levelValue in levels:
+        if not currentPath.exists():
+            currentPath.mkdir(parents=True, exist_ok=True)
             
-        existing = [d.name for d in current.iterdir() if d.is_dir()]
-        match = getMatchFromLLM(val, existing, key)
+        existingFolders = [d.name for d in currentPath.iterdir() if d.is_dir()]
+        match = getMatchFromLLM(levelValue, existingFolders, levelKey)
         
         if match:
-            current = current / match
+            currentPath = currentPath / match
         else:
             # If LLM is unsure, put it in a check folder so I can fix it later
-            newFolder = f"NEW_CHECK_{val}"
-            current = current / newFolder
-            current.mkdir(parents=True, exist_ok=True)
-            logging.info(f"Anomaly: created {current}")
-            sendNotify("Manual Check!", f"Sorting failed, check: {newFolder}")
+            newFolderName = f"NEW_CHECK_{levelValue}"
+            currentPath = currentPath / newFolderName
+            currentPath.mkdir(parents=True, exist_ok=True)
+            logging.info(f"Anomaly: created {currentPath}")
+            sendNotification("Manual Check!", f"Sorting failed, check: {newFolderName}")
 
-    return current
+    return currentPath
 
-def processFile(fPath):
+def processFile(filePath):
     """ Main logic for moving the render file """
-    logging.info(f"Detected: {fPath.name}")
-    sendNotify("New Render", f"Processing {fPath.name}...")
+    logging.info(f"Detected: {filePath.name}")
+    sendNotification("New Render", f"Processing {filePath.name}...")
     
     # Expected format: name_type_brand_project.ext
-    slugs = fPath.stem.split("_")
-    if len(slugs) < 4:
-        logging.warning(f"File {fPath.name} doesn't follow naming rules. Ignoring.")
+    parts = filePath.stem.split("_")
+    if len(parts) < 4:
+        logging.warning(f"File {filePath.name} doesn't follow naming rules. Ignoring.")
         return
 
-    wType = slugs[1]
-    brand = slugs[2]
-    projId = "_".join(slugs[3:])
+    workType = parts[1]
+    brandName = parts[2]
+    projectId = "_".join(parts[3:])
 
-    targetDir = getFinalPath(wType, brand, projId)
-    finalPath = targetDir / fPath.name
+    targetDir = getFinalPath(workType, brandName, projectId)
+    finalPath = targetDir / filePath.name
 
     # Simple versioning so we don't overwrite old renders
-    v = 1
+    version = 1
     while finalPath.exists():
-        finalPath = targetDir / fPath.with_name(f"{fPath.stem}_v{v:02d}{fPath.suffix}").name
-        v += 1
+        finalPath = targetDir / filePath.with_name(f"{filePath.stem}_v{version:02d}{filePath.suffix}").name
+        version += 1
 
     try:
-        shutil.move(str(fPath), str(finalPath))
-        logging.info(f"Done: {fPath.name} -> {targetDir.name}")
-        sendNotify("Organized!", f"Moved to {targetDir.name}")
+        shutil.move(str(filePath), str(finalPath))
+        logging.info(f"Done: {filePath.name} -> {targetDir.name}")
+        sendNotification("Organized!", f"Moved to {targetDir.name}")
     except Exception as e:
         logging.error(f"Move failed: {e}")
 
@@ -168,8 +168,8 @@ class WatcherHandler(FileSystemEventHandler):
 def startCleanup():
     """ Deletes old files from temp render folder """
     now = time.time()
-    src = Path(userConfig["sourceDir"])
-    for item in src.iterdir():
+    sourceDir = Path(userConfig["sourceDir"])
+    for item in sourceDir.iterdir():
         if item.is_file() and (now - item.stat().st_ctime > (userConfig["cleanupDays"] * 86400)):
             try:
                 item.unlink()
@@ -180,27 +180,27 @@ def startCleanup():
 if __name__ == "__main__":
     logging.info("Daemon active...")
     
-    sDir = Path(userConfig["sourceDir"])
-    sDir.mkdir(parents=True, exist_ok=True)
+    sourceDir = Path(userConfig["sourceDir"])
+    sourceDir.mkdir(parents=True, exist_ok=True)
     Path(userConfig["baseWorkDir"]).mkdir(parents=True, exist_ok=True)
 
     # Initial scan on startup
-    for item in sDir.iterdir():
+    for item in sourceDir.iterdir():
         if item.is_file(): processFile(item)
 
     handler = WatcherHandler()
-    obs = Observer()
-    obs.schedule(handler, str(sDir), recursive=False)
-    obs.start()
+    observer = Observer()
+    observer.schedule(handler, str(sourceDir), recursive=False)
+    observer.start()
 
-    lastRun = 0
+    lastCleanupRun = 0
     try:
         while True:
             # Daily cleanup check
-            if time.time() - lastRun > 86400:
+            if time.time() - lastCleanupRun > 86400:
                 startCleanup()
-                lastRun = time.time()
+                lastCleanupRun = time.time()
             time.sleep(5)
     except KeyboardInterrupt:
-        obs.stop()
-    obs.join()
+        observer.stop()
+    observer.join()
