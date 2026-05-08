@@ -41,7 +41,7 @@ Configuration is stored in `~/.config/aeRenderManager/config.json`. You can modi
 For the daemon to sort files correctly, renders must follow this naming pattern:
 `fileName_workType_brandName_projectId.ext`
 
-Example: `finalComp_freelance_wishAndKey_12_mothersDay.mp4`
+Example: `finalComp_freelance_wishAndKey_12.mp4` (Where `12` is the `projectId` that matches a folder like `12_mothersDay`)
 
 ## Service Management
 
