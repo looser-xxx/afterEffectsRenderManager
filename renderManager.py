@@ -160,12 +160,12 @@ def processFile(filePath):
         logging.error(f"Copy to toSend failed: {e}")
 
     targetDir = getFinalPath(workType, brandName, projectId)
-    finalPath = targetDir / filePath.name
+    finalPath = targetDir / f"{brandName}_{fileName}{filePath.suffix}"
 
     # Simple versioning so we don't overwrite old renders
     version = 1
     while finalPath.exists():
-        finalPath = targetDir / filePath.with_name(f"{filePath.stem}_v{version:02d}{filePath.suffix}").name
+        finalPath = targetDir / f"{brandName}_{fileName}_v{version:02d}{filePath.suffix}"
         version += 1
 
     try:
