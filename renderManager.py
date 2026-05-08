@@ -209,6 +209,14 @@ def startCleanup():
                 except Exception as e:
                     logging.error(f"Failed to clean {item.name}: {e}")
 
+def isVBoxRunning():
+    """ Check if any VirtualBox VMs are currently active """
+    try:
+        result = subprocess.run(["vboxmanage", "list", "runningvms"], capture_output=True, text=True)
+        return len(result.stdout.strip()) > 0
+    except:
+        return False
+
 if __name__ == "__main__":
     logging.info("Daemon active...")
     
@@ -232,6 +240,15 @@ if __name__ == "__main__":
             if time.time() - lastCleanupRun > 86400:
                 startCleanup()
                 lastCleanupRun = time.time()
+            
+            # Manual polling fallback for VirtualBox/NAS sync issues
+            if isVBoxRunning():
+                for item in sourceDir.iterdir():
+                    if item.is_file():
+                        # Give it a tiny bit of time to finish writing
+                        time.sleep(0.5)
+                        processFile(item)
+
             time.sleep(5)
     except KeyboardInterrupt:
         observer.stop()
