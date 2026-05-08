@@ -120,6 +120,10 @@ def getFinalPath(workType, brandName, projectId):
             logging.info(f"Anomaly: created {currentPath}")
             sendNotification("Manual Check!", f"Sorting failed, check: {newFolderName}")
 
+    # Add organized subfolders
+    currentPath = currentPath / "passes" / "afterEffects"
+    currentPath.mkdir(parents=True, exist_ok=True)
+
     return currentPath
 
 def processFile(filePath):
@@ -136,6 +140,24 @@ def processFile(filePath):
     workType = parts[1]
     brandName = parts[2]
     projectId = "_".join(parts[3:])
+    fileName = parts[0]
+
+    # Copy to toSend folder for easy sharing
+    try:
+        toSendDir = Path(userConfig["baseWorkDir"]) / "toSend"
+        toSendDir.mkdir(parents=True, exist_ok=True)
+        toSendPath = toSendDir / f"{brandName}_{fileName}{filePath.suffix}"
+        
+        # Versioning for toSend copy (brandName_fileName_1, brandName_fileName_2, etc.)
+        v = 1
+        while toSendPath.exists():
+            toSendPath = toSendDir / f"{brandName}_{fileName}_{v}{filePath.suffix}"
+            v += 1
+            
+        shutil.copy2(str(filePath), str(toSendPath))
+        logging.info(f"Copied to toSend: {toSendPath.name}")
+    except Exception as e:
+        logging.error(f"Copy to toSend failed: {e}")
 
     targetDir = getFinalPath(workType, brandName, projectId)
     finalPath = targetDir / filePath.name
@@ -166,16 +188,26 @@ class WatcherHandler(FileSystemEventHandler):
         if not event.is_directory: processFile(Path(event.dest_path))
 
 def startCleanup():
-    """ Deletes old files from temp render folder """
+    """ Deletes old files from temp render folder and toSend folder """
     now = time.time()
-    sourceDir = Path(userConfig["sourceDir"])
-    for item in sourceDir.iterdir():
-        if item.is_file() and (now - item.stat().st_ctime > (userConfig["cleanupDays"] * 86400)):
-            try:
-                item.unlink()
-                logging.info(f"Cleaned: {item.name}")
-            except:
-                pass
+    cleanupThreshold = userConfig["cleanupDays"] * 86400
+    
+    cleanupDirs = [
+        Path(userConfig["sourceDir"]),
+        Path(userConfig["baseWorkDir"]) / "toSend"
+    ]
+
+    for targetDir in cleanupDirs:
+        if not targetDir.exists():
+            continue
+            
+        for item in targetDir.iterdir():
+            if item.is_file() and (now - item.stat().st_ctime > cleanupThreshold):
+                try:
+                    item.unlink()
+                    logging.info(f"Cleaned: {item.name} from {targetDir.name}")
+                except Exception as e:
+                    logging.error(f"Failed to clean {item.name}: {e}")
 
 if __name__ == "__main__":
     logging.info("Daemon active...")
