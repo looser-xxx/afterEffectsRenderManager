@@ -15,7 +15,12 @@ A Python-based background daemon that automates the organization of After Effect
 ## Prerequisites
 
 - Python 3.x
-- Ollama (running locally with `qwen3.5:4b` pulled)
+- **Ollama:** A local LLM runner.
+  - [Download and install Ollama](https://ollama.com/download).
+  - Pull the required model:
+    ```bash
+    ollama pull qwen:4b  # The project is configured for qwen3.5:4b or qwen:4b equivalents
+    ```
 - `libnotify-bin` (for desktop notifications)
 
 ## Installation
